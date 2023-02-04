@@ -1,0 +1,96 @@
+version: '3.5'
+
+services:
+  movieimp-https-portal:
+    image: steveltn/https-portal:1.20
+    container_name: movieimp-https-portal
+    ports:
+      - 443:443
+    links:
+      - web-movieimp
+    environment:
+    #  - DOMAINS
+      - STAGE=local
+    volumes:
+      - ./Docker/ssl_certs:/var/lib/https-portal
+    networks:
+      - app-network
+
+  # Web
+  web-movieimp:
+    container_name: web-movieimp
+    build:
+      context: ./Docker/php
+      dockerfile: Dockerfile
+    volumes:
+      - .:/var/www/:cached
+      - ./Docker/php/php.ini:/usr/local/etc/php/php.ini
+    environment:
+      - APP_DEFAULT_LOCALE=ja_JP
+      - APP_DEFAULT_TIMEZONE=Asia/Tokyo
+      - DATABASE_HOST=db-local
+      - DATABASE_USER=root
+      - DATABASE_PASS=localuser
+      - DATABASE_NAME=movieimp
+      - SMTP_HOST=SMTP-local
+      - SMTP_PORT=1025
+      - SMTP_MAIL_CLASS_NAME=SMTP
+    ports:
+      - ${WEB_PORT}:80
+    networks:
+      - app-network
+
+  # DB
+  db-local:
+    platform: linux/x86_64 #M1チップ対応
+    # platform: linux/amd64 windows
+    image: mysql:8.0
+    restart: always
+    ports:
+      - ${DB_PORT}:3306
+    environment:
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASS}
+      - MYSQL_ROOT_PASSWORD=${DB_PASS}
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./Docker/mysql/etc-mysql.cnf:/etc/mysql/conf.d/etc-mysql.cnf
+      - ./Docker/mysql/data:/var/lib/mysql
+      - ./Docker/mysql/sqls:/docker-entrypoint-intitdb.data
+    networks:
+      - app-network
+
+  # SMTP
+  smtp-local:
+    image: schickling/mailcatcher
+    container_name: smtp-local
+    ports:
+      - "1050:1080"
+      - "1025:1025"
+    networks:
+      - app-network
+
+  # phpmyadmin
+  phpmyadmin-local:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin-localuser
+    restart: always
+    environment:
+      - PMA_ARBITARY=1
+      - PMA_HOST=db-local
+      - PMA_USER=${PMA_USER}
+      - PMA_PASSWORD=${PMA_PASS}
+    links:
+      - db-local
+    ports:
+      - ${PMA_PORT}:80
+    volumes:
+      - /sessions
+    networks:
+      - app-network
+
+# Networks
+networks:
+  app-network:
+    driver: bridge
